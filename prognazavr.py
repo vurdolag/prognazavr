@@ -369,22 +369,26 @@ class Statistic:
 
 
 class Game:
-    def check(self, pars, command):
-        for ind, x in enumerate(pars[:2]):
-            for word in command:
+    def check(self, pars, index: tuple, commands):
+        if not isinstance(pars, list):
+            pars = [pars]
+        for ind, x in enumerate(pars[index[0]:index[1]]):
+            for word in commands:
                 if distance(x, word) >= 73:
                     pars[ind] = word
                 if 'кураж' in x:
                     pars[ind] = 'кураж'
 
-    def check_command(self, pars):
+    def check_command(self, pars, commands):
         if not isinstance(pars, list):
             pars = [pars]
+        count = 0
         for x in pars:
-            if x not in command:
-                print('Упс... проверь правильность ввода ->', c)
-                return False
-        return True
+            if x not in commands:
+                print('Упс... проверь правильность ввода ->', x)
+                count += 1
+
+        return True if not count else False
 
     def RE(self, text):
         text = re.sub(r'\uFF09', ')', text)
@@ -566,9 +570,9 @@ class BattleOfBet(Game):
                 print('Упс... проверь правильность ввода ->', c)
                 continue
 
-            self.check(pars, command)
+            self.check(pars, (0, 2), command)
 
-            if self.check_command(pars[:2]):
+            if self.check_command(pars[:2], command):
                 math_results.append(pars)
 
         return math_results
@@ -592,22 +596,11 @@ class BattleOfBet(Game):
             r = re.findall(r'(\w+?.+?\w+?.+?\d{1,2}.+?\d{1,2})+?', text)
             temp = []
             for j in r:
-                j = self.RE(j)
                 pars = re.findall(r'\w+', j.lower())
 
-                for ind, x in enumerate(pars[:2]):
-                    for word in commands:
-                        if distance(x, word) >= 73:
-                            pars[ind] = word
-
-                        if 'кураж' in x:
-                            pars[ind] = 'кураж'
-
-                for x in pars[:2]:
-                    if x not in commands:
-                        print('Упс... некоректное название команды...', x)
-                        continue
-                temp.append(pars)
+                self.check(pars, (0, 2), commands)
+                if self.check_command(pars[:2], commands):
+                    temp.append(pars)
 
             itog[user_id] = temp
             date[user_id] = i['date']
@@ -663,14 +656,14 @@ class BattleOfBet(Game):
                 print('Упс... проверь правильность ввода ->', c)
                 continue
 
-            self.check(pars, command)
-
-            g = self.check_command(pars[:2])
+            self.check(pars, (0, 2), command)
 
             if len(pars) == 5:
-                g = self.check_command(pars[-1])
+                self.check(pars, (4, 5), command)
+                if not self.check_command(pars[-1], command):
+                    continue
 
-            if g:
+            if self.check_command(pars[:2], command):
                 math_results.append(pars)
 
         return math_results
@@ -695,15 +688,18 @@ class BattleOfBet(Game):
             r = re.findall(r'(\w+?.+?\w+?.+?\d{1,2}.+?\d{1,2}(\(.+?\w+?\)|))+?', text)
             temp = []
             for j in r:
-                j = self.RE(j)
+                j = self.RE(j)[0]
                 pars = re.findall(r'\w+', j.lower())
 
-                self.check(pars, commands)
+                self.check(pars, (0, 2), commands)
 
-                if not self.check_command(pars[:2]):
-                    continue
+                if len(pars) == 5:
+                    self.check(pars, (4, 5), commands)
+                    if not self.check_command(pars[-1], commands):
+                        continue
 
-                temp.append(pars)
+                if self.check_command(pars[:2], commands):
+                    temp.append(pars)
 
             itog[user_id] = temp
             date[user_id] = i['date']
@@ -753,16 +749,18 @@ class Worker:
         game = games()
 
         if self.check_mode():
+            self.mode = 'reiting/'
             self.data_input = game.inputs
             self.pars_comment = game.pars_comment
         else:
+            self.mode = 'playof/'
             self.data_input = game.inputs_playof
             self.pars_comment = game.pars_comment_playof
 
     def open_data_result(self, post):
         math_results = []
         try:
-            with open(self.path + 'result/math_results' + '_'.join(post), 'rb') as f:
+            with open(f'{self.path}result/{self.mode}math_results{"_".join(post)}', 'rb') as f:
                 math_results = pickle.load(f)
         except FileNotFoundError:
             pass
@@ -770,16 +768,18 @@ class Worker:
         return math_results
 
     def save_data_result(self, result, post):
-        with open(self.path + 'result/math_results' + '_'.join(post), 'wb') as f:
+        if not isinstance(post, list):
+            post = [post]
+        with open(f'{self.path}result/{self.mode}math_results{"_".join(post)}', 'wb') as f:
             pickle.dump(result, f)
 
     def open_data_point(self, post):
-        with open(self.path + 'data/' + post, 'rb') as f:
+        with open(f'{self.path}data/{self.mode}{post}', 'rb') as f:
             point = pickle.load(f)
         return point
 
     def save_data_point(self, point, post):
-        with open(self.path + 'data/' + post, 'wb') as f:
+        with open(f'{self.path}data/{self.mode}{post}', 'wb') as f:
             pickle.dump(point, f)
 
     def create_full_stat(self, file):
@@ -800,9 +800,7 @@ class Worker:
             do.create_image(stat, 'all_stat', self.path_img)
 
     def get_input(self, post):
-        result = self.open_data_result(post)
-        if not result:
-            result = self.data_input()
+        result = self.data_input()
 
         while True:
             my_print(result)
@@ -879,7 +877,7 @@ class Worker:
 
 
     def mainapp(self):
-        file = os.listdir(self.path + 'data')
+        file = os.listdir(f'{self.path}data/{self.mode}')
 
         post, flag, result, end = self.start(file)
         if end:
@@ -890,7 +888,7 @@ class Worker:
         if p in file and flag:
             print("В базе уже есть информация по этому посту\nОбработать еще раз?")
             if check_input():
-                res = self.open_data_result(p)
+                res = self.open_data_result(post)
                 if not res:
                     print('Прошлый результат не обнаружен.')
                     res = self.get_input(post)
@@ -904,7 +902,8 @@ class Worker:
                     result = self.get_input(post)
 
             else:
-                self.create_full_stat(file)
+                if len(file) > 1:
+                    self.create_full_stat(file)
                 print('PROG OK')
                 print('#' * 45 + '\n')
                 time.sleep(1)
@@ -933,7 +932,8 @@ class Worker:
 
             point = do.sorter(point, date)
 
-            self.save_data_result(result, p)
+            self.save_data_point(point, p)
+
             self.write_xls(do, point, self.name_xls)
 
             print('Сделать картинку?')
