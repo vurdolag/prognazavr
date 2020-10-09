@@ -369,6 +369,9 @@ class Statistic:
 
 
 class Game:
+    def check_mode(self):
+        pass
+
     def check(self, pars, index: tuple, commands):
         if not isinstance(pars, list):
             pars = [pars]
@@ -390,9 +393,12 @@ class Game:
 
         return True if not count else False
 
-    def RE(self, text):
+    def RE_s(self, text):
         text = re.sub(r'\uFF09', ')', text)
-        text = re.sub(r'\uFF08', '(', text)
+        return re.sub(r'\uFF08', '(', text)
+
+    def RE(self, text):
+        text = self.RE_s(text)
         return re.findall(r'.+?\(.+?\)', text)
 
     def comment(self, i, text, user_id):
@@ -402,9 +408,21 @@ class Game:
                 text += t['text']
         return text
 
+    def add(self, point, user_id, val):
+        point[user_id] = point.get(user_id, 0) + val
+
+
+
+
 
 
 class BestPlayer(Game):
+    path = 'bd/best_player/'
+    name_xls = 'best_player.xlsx'
+
+    def check_mode(self):
+        return self.inputs, self.pars_comment, ''
+
     def inputs(self):
         math_results = []
         print("\nВвод результата, формат:\nФамилия Команда\nзакончить - стоп")
@@ -415,7 +433,7 @@ class BestPlayer(Game):
                 c = best + ' 1'
             else:
                 c = input(">>> ").lower() + ' 0'
-            if 'стоп' in c:
+            if 'стоп' in c or '0' == c:
                 break
 
             if 'сброс' in c:
@@ -550,13 +568,24 @@ class BestPlayer(Game):
         return point, date, itog
 
 
+
 class BattleOfBet(Game):
+    path = 'bd/battle_of_bet/'
+    name_xls = 'test.xlsx'
+
+    def check_mode(self):
+        string = input("Рейтинг [0] / Плейоф [1] >>> ").lower()
+        if 'рейтинг' in string or '0' in string:
+            return self.inputs, self.pars_comment, 'reiting/'
+        else:
+            return self.inputs_playof, self.pars_comment_playof, 'playof/'
+
     def inputs(self):
         math_results = []
         print("\nВвод результата, формат:\nкоманда1 команда2 результат1 результат2\nзакончить - стоп")
         while True:
             c = input(">>> ").lower()
-            if 'стоп' in c:
+            if 'стоп' in c or '0' == c:
                 break
 
             if 'сброс' in c:
@@ -642,7 +671,7 @@ class BattleOfBet(Game):
         print("\nВвод результата, формат:\nкоманда1 команда2 результат1 результат2 пенальти\nзакончить - стоп")
         while True:
             c = input(">>> ").lower()
-            if 'стоп' in c:
+            if 'стоп' in c or '0' == c:
                 break
 
             if 'сброс' in c:
@@ -688,7 +717,7 @@ class BattleOfBet(Game):
             r = re.findall(r'(\w+?.+?\w+?.+?\d{1,2}.+?\d{1,2}(\(.+?\w+?\)|))+?', text)
             temp = []
             for j in r:
-                j = self.RE(j)[0]
+                j = self.RE_s(j[0])
                 pars = re.findall(r'\w+', j.lower())
 
                 self.check(pars, (0, 2), commands)
@@ -713,49 +742,51 @@ class BattleOfBet(Game):
                         j = [j[1], j[0], j[3], j[2]]
 
                     if x[0] == j[0] and x[1] == j[1]:
-                        if x[2] == j[2] and x[3] == j[3]:
-                            point[i[0]] = point.get(i[0], 0) + config['1']
+                        if x[2] == j[2] and x[3] == j[3] and len(x) == 4 and len(j) == 4:
+                            self.add(point, i[0], config['1'])
                             # print(j, x, 5)
                             continue
 
                         win = (int(x[2]) < int(x[3]) and int(j[2]) < int(j[3])) or (
                                 int(x[2]) > int(x[3]) and int(j[2]) > int(j[3]))
 
-                        if int(x[2]) - int(x[3]) == int(j[2]) - int(j[3]) and win or (
-                                x[2] == x[3] and j[2] == j[3]):
-                            point[i[0]] = point.get(i[0], 0) + config['2']
+                        #ничья
+                        if x[2] == x[3] and j[2] == j[3] and len(x) == 5 and len(j) == 5:
+                            if x[4] == j[4] and x[2] == j[2]:
+                                self.add(point, i[0], 7)
+                                continue
+
+                            if x[2] == j[2] and x[4] != j[4] or x[4] == j[4]:
+                                self.add(point, i[0], 5)
+                                continue
+
+                        if int(x[2]) - int(x[3]) == int(j[2]) - int(j[3]) and win and len(x) == 4 and len(j) == 4:
+                            self.add(point, i[0], config['2'])
                             # print(j, x, 3)
                             continue
 
                         if win:
-                            point[i[0]] = point.get(i[0], 0) + config['3']
+                            self.add(point, i[0], config['3'])
                             # print(j, x, 1)
                             continue
 
-                        point[i[0]] = point.get(i[0], 0) + config['4']
+                        self.add(point, i[0], config['4'])
 
         return point, date, itog
 
 
 class Worker:
-    def __init__(self, games, path, commands, name_xls, token):
-        self.path_img = path + 'source.jpg'
-        self.path = path
-        self.name_xls = name_xls
+    def __init__(self, games, commands, token):
         self.token = token
         self.commands = commands
-        self.mode = ''
 
         game = games()
 
-        if self.check_mode():
-            self.mode = 'reiting/'
-            self.data_input = game.inputs
-            self.pars_comment = game.pars_comment
-        else:
-            self.mode = 'playof/'
-            self.data_input = game.inputs_playof
-            self.pars_comment = game.pars_comment_playof
+        self.path_img = game.path + 'source.jpg'
+        self.path = game.path
+        self.name_xls = game.name_xls
+
+        self.data_input, self.pars_comment, self.mode = game.check_mode()
 
     def open_data_result(self, post):
         math_results = []
@@ -800,6 +831,15 @@ class Worker:
             do.create_image(stat, 'all_stat', self.path_img)
 
     def get_input(self, post):
+
+        result = self.open_data_result(post)
+        if result:
+            print('В базе уже есть результат...')
+            my_print(result)
+            print('Ввести заного?')
+            if not check_input():
+                return result
+
         result = self.data_input()
 
         while True:
@@ -870,11 +910,6 @@ class Worker:
                     print('Это не число!', ex)
         else:
             return
-
-    def check_mode(self):
-        string = input("Рейтинг [0] / Плейоф [1] >>> ").lower()
-        return 'рейтинг' in string or '0' in string
-
 
     def mainapp(self):
         file = os.listdir(f'{self.path}data/{self.mode}')
@@ -961,17 +996,13 @@ while True:
     if c == '1':
 
         go = Worker(BattleOfBet,
-                    'bd/battle_of_bet/',
                     command,
-                    'test.xlsx',
                     serv_token)
         go.mainapp()
 
     elif c == '2':
         go = Worker(BestPlayer,
-                    'bd/best_player/',
                     command,
-                    'best_player.xlsx',
                     serv_token)
         go.mainapp()
 
